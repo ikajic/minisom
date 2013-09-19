@@ -1,5 +1,8 @@
 from numpy import sqrt,sqrt,array,unravel_index,nditer,linalg,random,subtract,power,exp,pi,zeros,arange,outer,meshgrid
 from collections import defaultdict
+ 
+# TODO
+import pylab as plt
 
 """
     Minimalistic implementation of the Self Organizing Maps (SOM).
@@ -103,6 +106,23 @@ class MiniSom:
             rand_i = int(round(random.rand()*len(data)-1)) # pick a random sample          
             self.update(data[rand_i],self.winner(data[rand_i]),iteration)
 
+    def train_random_scale_weights(self, data, num_iteration):
+        """ Trains the SOM picking samples at random from data 
+        and after the training scales the weights to match the original data range"""
+        self._init_T(num_iteration)
+
+        # store range of values for each dimension
+        base = data.min(axis=0)
+        data_range = data.max(axis=0)-data.min(axis=0)
+
+        for iteration in range(num_iteration):
+            rand_i = int(round(random.rand()*len(data)-1))
+            self.update(data[rand_i],self.winner(data[rand_i]),iteration)
+
+        # after the training is over, project weigts into data space
+        self.weights*=data_range
+        self.weights+=base
+
     def train_batch(self,data,num_iteration):
         """ Trains using all the vectors in data sequentially """
         self._init_T(len(data)*num_iteration)
@@ -162,6 +182,20 @@ class MiniSom:
 
 
 if __name__ == '__main__':
-	data = random.rand(100,3)
+	data = random.rand(100,3)*50
 	som = MiniSom(5,5,3)
-	som.train_random(data,50)
+	w_init = copy(som.weights.reshape(25,3))
+
+#	plt.plot(data[:, 0], data[:,1], data[:,2], c='b', marker='*', linestyle='None', alpha=0.1, label='data')
+	plt.plot([:,0], som.weights.reshape(25,3)[:,1], som.weights.reshape(25,3)[:,2], label='Init', c='g')
+
+	som.train_random_scale_weights(data,50)
+	w_final = som.weights.reshape(25,3)
+
+    # plot weights after and before
+	plt.scatter(w_final[:,0], w_final[:,1], w_final[:,2], label='Trained', c='r')
+	plt.scatter(w_init[:,0], w_init[:,1],w_init[:,2], label='Init', c='r')
+#	plt.scatter(data[:,0], som.weights.reshape(25,3)[:,1], label='Init', c='r')
+	plt.legend()
+
+	plt.show()
