@@ -15,19 +15,31 @@ from numpy import apply_along_axis, newaxis, genfromtxt
     Giuseppe Vettigli 2013.
 """
 class Normalizer:
+
 	def __init__(self, data):
 		self.data = data
 		self.n, self.d = data.shape
 		self.mins = data.min(axis=0)
 		self.ranges = data.max(axis=0)-data.min(axis=0)
-		self.normalized = self.normalize()
+		self.means = data.mean(axis=0)
+		self.stds = data.std(axis=0)
+		self.forbnorms = apply_along_axis(lambda x: linalg.norm(x),1,data) 
 	
-	def normalize(self):
+	def none(self):
+		return self.data
+		
+	def zscores(self):
+		return (self.data-self.means)/self.stds
+		
+	def minmax(self):
 		return (self.data-self.mins)/self.ranges
+		
+	def forbnorm(self):
+		return self.data/self.forbnorms[:, newaxis]
 		
 
 class MiniSom:
-    def __init__(self,x,y,input_len, data,sigma=1.0,learning_rate=0.5,norm=None):
+    def __init__(self,x,y,input_len, data,sigma=1.0,learning_rate=0.5, norm='none'):
         """
             Initializes a Self Organizing Maps.
             x,y - dimensions of the SOM
@@ -41,17 +53,20 @@ class MiniSom:
         """
         self.learning_rate = learning_rate
         self.sigma = sigma
-        self.weights = random.rand(x,y,input_len)*2-1 # random initialization
         self.data = data
-        #------self.weights = array([v/linalg.norm(v) for v in self.weights]) # normalization
-        self.weights_init = copy(self.weights)
         self.activation_map = zeros((x,y))
         self.neigx = arange(x)
         self.neigy = arange(y) # used to evaluate the neighborhood function
         self.neighborhood = self.gaussian
+        
+        # weights are initialized in data ranges 
         self.norm = Normalizer(data)
         if norm:        	
-        	self.data = self.norm.normalize()
+        	self.data = getattr(self.norm, norm)()
+        self.init_weights(x,y, input_len)
+       
+        #self.weights = array([v/linalg.norm(v) for v in self.weights])
+        self.weights_init = copy(self.weights)
 
     def _activate(self,x):
         """ Updates matrix activation_map, in this matrix the element i,j is the response of the neuron i,j to x """
@@ -79,7 +94,15 @@ class MiniSom:
         p = power(xx-c[0],2) + power(yy-c[1],2)
         d = 2*pi*sigma*sigma
         return exp(-(p)/d)*(1-2/d*p)
-
+       
+    def init_weights(self, x, y, input_len):
+		"""
+		Initialize weights values in the range of data
+		"""
+		rw_min = self.data.min(axis=0)
+		rw_max = self.data.max(axis=0)
+		self.weights = random.rand(x, y, input_len)*(rw_max-rw_min)+rw_min
+        
     def winner(self,x):
         """ Computes the coordinates of the winning neuron for the sample x """
         self._activate(x)
@@ -101,9 +124,7 @@ class MiniSom:
         it = nditer(g, flags=['multi_index'])
         while not it.finished:
             # eta * neighborhood_function * (x-w)
-            self.weights[it.multi_index] += g[it.multi_index]*(x-self.weights[it.multi_index])            
-            ##------ normalization
-            #self.weights[it.multi_index] = self.weights[it.multi_index] / linalg.norm(self.weights[it.multi_index])
+            self.weights[it.multi_index] += g[it.multi_index]*(x-self.weights[it.multi_index])             
             it.iternext()
 
     def quantization(self,data):
@@ -121,7 +142,6 @@ class MiniSom:
         it = nditer(self.activation_map, flags=['multi_index'])
         while not it.finished:
             self.weights[it.multi_index] = data[int(random.rand()*len(data)-1)]
-            #self.weights[it.multi_index] = self.weights[it.multi_index]/linalg.norm(self.weights[it.multi_index])
             it.iternext()
             
 	self.weights_init = copy(self.weights)
@@ -194,7 +214,7 @@ class MiniSom:
     		winmap[self.winner(x)].append(x)
     	return winmap
     	
-    def get_weights(self, dspace=True):
+    def get_weights(self, dspace=False):
     	"""
     		Flattens the two first dimensions of weights and returns 2D initial
     		and trained weights
@@ -211,32 +231,21 @@ class MiniSom:
     		w += self.norm.mins
     		
     	return winit, w
-    	 
-
-# helper functions used for normalization
-
-def get_ranges(data):
-	mins = data.min(axis=0)
-	ranges = data.max(axis=0)-data.min(axis=0)
-	
-	return mins, ranges
-	
-def _norm(data):
-	return apply_along_axis(lambda x:x/linalg.norm(x), 1, data)
 	
 if __name__ == '__main__':
 	x = 10
 	d = 3
 	hands = (3,4,5)
-	joints = (8,9,10)
+	joints = (9,10,11)
 		
-	data = genfromtxt('/home/ivana/babbling_KB_left_arm.dat', skiprows=2, usecols=hands)[:1000]
+	data = genfromtxt('/home/ivana/babbling_KB_left_arm.dat', skiprows=3, usecols=joints)[::50]
+	#data = apply_along_axis(lambda x: x/linalg.norm(x),1,data) # data normalization
 		
-	som = MiniSom(x, x, d,data, sigma=0.5, learning_rate=0.5, norm=True)
-	som.random_weights_init()
-	som.train_random(1000)
+	som = MiniSom(x, x, d, data, sigma=0.5, learning_rate=0.5, norm='none')
+	som.train_random(2000)
 	
 	wi, w = som.get_weights()
 	
-	psom.plot_data3d(final_som=w, data=data, init_som =wi, nr_nodes=x**2)
+	# TODO: make a wrapper for MiniSom for plotting
+	psom.plot_3d(final_som=w, data=data, init_som=wi, nr_nodes=x**2)
 	plt.show()
