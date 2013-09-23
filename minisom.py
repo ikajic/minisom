@@ -1,8 +1,13 @@
+from __future__ import division
 from numpy import sqrt,sqrt,array,unravel_index,nditer,linalg,random,subtract,power,exp,pi,zeros,arange,outer,meshgrid
 from collections import defaultdict
  
 # TODO
 import pylab as plt
+from copy import copy
+import plot_som as psom
+from numpy import apply_along_axis, newaxis
+
 
 """
     Minimalistic implementation of the Self Organizing Maps (SOM).
@@ -25,6 +30,7 @@ class MiniSom:
         self.sigma = sigma
         self.weights = random.rand(x,y,input_len)*2-1 # random initialization
         self.weights = array([v/linalg.norm(v) for v in self.weights]) # normalization
+        self.weights_init = copy(self.weights)
         self.activation_map = zeros((x,y))
         self.neigx = arange(x)
         self.neigy = arange(y) # used to evaluate the neighborhood function
@@ -93,35 +99,35 @@ class MiniSom:
 
     def random_weights_init(self,data):
         """ Initializes the weights of the SOM picking random samples from data """
+                	
+	# ranges of values for each dimension
+        self.mins = data.min(axis=0)
+        self.ranges = data.max(axis=0)-data.min(axis=0)
+        
         it = nditer(self.activation_map, flags=['multi_index'])
         while not it.finished:
             self.weights[it.multi_index] = data[int(random.rand()*len(data)-1)]
             self.weights[it.multi_index] = self.weights[it.multi_index]/linalg.norm(self.weights[it.multi_index])
             it.iternext()
+            
+	self.weights_init = copy(self.weights)
 
     def train_random(self,data,num_iteration):        
         """ Trains the SOM picking samples at random from data """
         self._init_T(num_iteration)        
+       
+        
+        # store weights before the training
+        self.p_weights_init = (copy(self.weights)*self.ranges+self.mins)
+        
+        # start training on normalized weights
         for iteration in range(num_iteration):
             rand_i = int(round(random.rand()*len(data)-1)) # pick a random sample          
-            self.update(data[rand_i],self.winner(data[rand_i]),iteration)
-
-    def train_random_scale_weights(self, data, num_iteration):
-        """ Trains the SOM picking samples at random from data 
-        and after the training scales the weights to match the original data range"""
-        self._init_T(num_iteration)
-
-        # store range of values for each dimension
-        base = data.min(axis=0)
-        data_range = data.max(axis=0)-data.min(axis=0)
-
-        for iteration in range(num_iteration):
-            rand_i = int(round(random.rand()*len(data)-1))
-            self.update(data[rand_i],self.winner(data[rand_i]),iteration)
-
-        # after the training is over, project weigts into data space
-        self.weights*=data_range
-        self.weights+=base
+            self.update(data[rand_i],self.winner(data[rand_i]),iteration)          
+      
+        # project weights into data space
+        self.p_weights=self.weights*self.ranges
+        self.p_weights+=self.mins
 
     def train_batch(self,data,num_iteration):
         """ Trains using all the vectors in data sequentially """
@@ -179,23 +185,44 @@ class MiniSom:
     	for x in data:
     		winmap[self.winner(x)].append(x)
     	return winmap
+    	
+    def get_weights(self):
+    	"""
+    		Flattens the two first dimensions of weights and returns 2D initial
+    		and trained weights
+    	"""
+    	d1, d2, d3 = self.weights.shape
+    	return self.weights_init.reshape(d1*d2, d3), self.weights.reshape(d1*d2, d3)
+    	 
 
+# helper functions used for normalization
 
+def get_ranges(data):
+	mins = data.min(axis=0)
+	ranges = data.max(axis=0)-data.min(axis=0)
+	
+	return mins, ranges
+	
 if __name__ == '__main__':
-	data = random.rand(100,3)*50
-	som = MiniSom(5,5,3)
-	w_init = copy(som.weights.reshape(25,3))
+	x = 10
+	d = 3
 
-#	plt.plot(data[:, 0], data[:,1], data[:,2], c='b', marker='*', linestyle='None', alpha=0.1, label='data')
-	plt.plot([:,0], som.weights.reshape(25,3)[:,1], som.weights.reshape(25,3)[:,2], label='Init', c='g')
+	nrm = lambda d: apply_along_axis(lambda x: linalg.norm(x), 1, d)
+	
+	data = random.rand(1000,d)
+	mins, ranges = get_ranges(data)
+        
+	#data = apply_along_axis(lambda x: x/linalg.norm(x),1, data) # data normalization
+		
+	som = MiniSom(x, x, d, sigma=0.6, learning_rate=0.5)
+	som.random_weights_init(data)
+	
+	n = nrm(som.weights_init.reshape(x**2, d)) # norms
 
-	som.train_random_scale_weights(data,50)
-	w_final = som.weights.reshape(25,3)
-
-    # plot weights after and before
-	plt.scatter(w_final[:,0], w_final[:,1], w_final[:,2], label='Trained', c='r')
-	plt.scatter(w_init[:,0], w_init[:,1],w_init[:,2], label='Init', c='r')
-#	plt.scatter(data[:,0], som.weights.reshape(25,3)[:,1], label='Init', c='r')
-	plt.legend()
-
+	#w = som.weights_init.reshape(x**2, d)*n[:, newaxis]*som.ranges+som.mins
+	
+	som.train_random(data, 500)
+	
+	wi, w = som.get_weights()
+	psom.plot_data3d(final_som=w, data=data, init_som=wi, nr_nodes=x**2)#, w_init)
 	plt.show()
