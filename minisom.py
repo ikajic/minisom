@@ -1,12 +1,11 @@
 from __future__ import division
-from numpy import sqrt,sqrt,array,unravel_index,nditer,linalg,random,subtract,power,exp,pi,zeros,arange,outer,meshgrid
+from copy import copy
+from numpy import sqrt,sqrt,array,unravel_index,nditer,linalg,random,subtract,power,exp,pi,zeros,arange,outer,meshgrid, apply_along_axis, newaxis, genfromtxt
 from collections import defaultdict
  
 # TODO
 import pylab as plt
-from copy import copy
 import plot_som as psom
-from numpy import apply_along_axis, newaxis, genfromtxt
 
 
 """
@@ -213,8 +212,9 @@ class MiniSom:
     	for x in data:
     		winmap[self.winner(x)].append(x)
     	return winmap
-    	
-    def get_weights(self, dspace=False):
+    
+    # TODO: refactor this method
+    def get_weights(self):
     	"""
     		Flattens the two first dimensions of weights and returns 2D initial
     		and trained weights
@@ -223,13 +223,6 @@ class MiniSom:
     	winit = self.weights_init.reshape(d1*d2, d3)
     	w = self.weights.reshape(d1*d2, d3)
     	
-    	# if we want project weights to data space
-    	if dspace:
-    		winit *= self.norm.ranges
-    		w *= self.norm.ranges
-    		winit += self.norm.mins
-    		w += self.norm.mins
-    		
     	return winit, w
 	
 if __name__ == '__main__':
@@ -239,13 +232,12 @@ if __name__ == '__main__':
 	joints = (9,10,11)
 		
 	data = genfromtxt('/home/ivana/babbling_KB_left_arm.dat', skiprows=3, usecols=joints)[::50]
-	#data = apply_along_axis(lambda x: x/linalg.norm(x),1,data) # data normalization
 		
-	som = MiniSom(x, x, d, data, sigma=0.5, learning_rate=0.5, norm='none')
-	som.train_random(2000)
+	som = MiniSom(x, x, d, data, sigma=0.6, learning_rate=0.5, norm='zscores')
+	som.train_random(1000)
 	
-	wi, w = som.get_weights()
+	wi, w = som.get_weights()	
 	
 	# TODO: make a wrapper for MiniSom for plotting
-	psom.plot_3d(final_som=w, data=data, init_som=wi, nr_nodes=x**2)
+	psom.plot_3d(final_som=w, data=som.data, init_som=wi, nr_nodes=x**2, title='zscored data')
 	plt.show()
