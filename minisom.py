@@ -226,19 +226,3 @@ class MiniSom:
     	
     	return winit, w
 	
-if __name__ == '__main__':
-	x = 10
-	d = 3
-	hands = (3,4,5)
-	joints = (9,10,11)
-		
-	data = genfromtxt('/home/ivana/babbling_KB_left_arm.dat', skiprows=3, usecols=joints)[::50]
-		
-	som = MiniSom(x, x, d, data, sigma=0.6, learning_rate=0.5, norm='none')
-	som.train_random(1000)
-	
-	wi, w = som.get_weights()	
-	
-	# TODO: make a wrapper for MiniSom for plotting
-	psom.plot_3d(final_som=w, data=som.data, init_som=wi, nr_nodes=x**2, title='zscored data')
-	plt.show()
