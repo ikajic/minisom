@@ -6,7 +6,7 @@ from collections import defaultdict
 # TODO
 import pylab as plt
 import plot_som as psom
-
+import pdb
 
 """
     Minimalistic implementation of the Self Organizing Maps (SOM).
@@ -60,8 +60,7 @@ class MiniSom:
         
         # weights are initialized in data ranges 
         self.norm = Normalizer(data)
-        if norm:        	
-        	self.data = getattr(self.norm, norm)()
+        self.data = getattr(self.norm, norm)()
         self.init_weights(x,y, input_len)
        
         #self.weights = array([v/linalg.norm(v) for v in self.weights])
@@ -70,9 +69,11 @@ class MiniSom:
     def _activate(self,x):
         """ Updates matrix activation_map, in this matrix the element i,j is the response of the neuron i,j to x """
         s = subtract(x,self.weights) # x - w
+        #pdb.set_trace()
         it = nditer(self.activation_map, flags=['multi_index'])
         while not it.finished:
             self.activation_map[it.multi_index] = linalg.norm(s[it.multi_index]) # || x - w ||
+            #self.activation_map[it.multi_index] = s[it.multi_index]
             it.iternext()
 
     def activate(self,x):
@@ -233,7 +234,7 @@ if __name__ == '__main__':
 		
 	data = genfromtxt('/home/ivana/babbling_KB_left_arm.dat', skiprows=3, usecols=joints)[::50]
 		
-	som = MiniSom(x, x, d, data, sigma=0.6, learning_rate=0.5, norm='zscores')
+	som = MiniSom(x, x, d, data, sigma=0.6, learning_rate=0.5, norm='none')
 	som.train_random(1000)
 	
 	wi, w = som.get_weights()	
