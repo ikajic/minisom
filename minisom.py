@@ -1,5 +1,5 @@
 from __future__ import division
-from copy import copy
+from copy import deepcopy
 from numpy import sqrt,sqrt,array,unravel_index,nditer,linalg,random,subtract,power,exp,pi,zeros,arange,outer,meshgrid, apply_along_axis, newaxis, genfromtxt
 from collections import defaultdict
  
@@ -15,27 +15,35 @@ import pdb
 """
 class Normalizer:
 
-	def __init__(self, data):
-		self.data = data
-		self.n, self.d = data.shape
-		self.mins = data.min(axis=0)
-		self.ranges = data.max(axis=0)-data.min(axis=0)
-		self.means = data.mean(axis=0)
-		self.stds = data.std(axis=0)
-		self.forbnorms = apply_along_axis(lambda x: linalg.norm(x),1,data) 
-	
-	def none(self):
-		return self.data
-		
-	def zscores(self):
-		return (self.data-self.means)/self.stds
-		
-	def minmax(self):
-		return (self.data-self.mins)/self.ranges
-		
-	def forbnorm(self):
-		return self.data/self.forbnorms[:, newaxis]
-		
+    def __init__(self, data):
+        self.data = data
+        self.n, self.d = data.shape
+        self.mins = data.min(axis=0)
+        self.ranges = data.max(axis=0)-data.min(axis=0)
+        self.means = data.mean(axis=0)
+        self.stds = data.std(axis=0)
+        self.forbnorms = apply_along_axis(lambda x: linalg.norm(x),1,data) 
+    
+    def none(self, data=None):
+        if data is None:
+            data = self.data
+        return data
+        
+    def zscores(self, data=None):
+        if data is None:
+            data = self.data
+        return (data-self.means)/self.stds
+        
+    def minmax(self, data=None):
+        if data is None:
+            data = self.data    
+        return (data-self.mins)/self.ranges
+        
+    def forbnorm(self, data=None):
+        if data is None:
+            data = self.data    
+        return data/self.forbnorms[:, newaxis]
+        
 
 class MiniSom:
     def __init__(self,x,y,input_len, data,sigma=1.0,learning_rate=0.5, norm='none'):
@@ -64,7 +72,7 @@ class MiniSom:
         self.init_weights(x,y, input_len)
        
         #self.weights = array([v/linalg.norm(v) for v in self.weights])
-        self.weights_init = copy(self.weights)
+        self.weights_init = deepcopy(self.weights)
 
     def _activate(self,x):
         """ Updates matrix activation_map, in this matrix the element i,j is the response of the neuron i,j to x """
@@ -76,6 +84,19 @@ class MiniSom:
             #self.activation_map[it.multi_index] = s[it.multi_index]
             it.iternext()
 
+    def __project_weights(self):
+        """
+        Projects weights and data back into original space using de-normalization.
+        """
+        self.weights *= self.norm.ranges
+        self.weights += self.norm.mins
+        
+        self.weights_init *= self.norm.ranges
+        self.weights_init += self.norm.mins        
+        
+        self.data *= self.norm.ranges                
+        self.data += self.norm.mins
+        
     def activate(self,x):
         """ Returns the activation map to x """
         self._activate(x)
@@ -96,12 +117,12 @@ class MiniSom:
         return exp(-(p)/d)*(1-2/d*p)
        
     def init_weights(self, x, y, input_len):
-		"""
-		Initialize weights values in the range of data
-		"""
-		rw_min = self.data.min(axis=0)
-		rw_max = self.data.max(axis=0)
-		self.weights = random.rand(x, y, input_len)*(rw_max-rw_min)+rw_min
+        """
+        Initialize weights values in the range of data
+        """
+        rw_min = self.data.min(axis=0)
+        rw_max = self.data.max(axis=0)
+        self.weights = random.rand(x, y, input_len)*(rw_max-rw_min)+rw_min
         
     def winner(self,x):
         """ Computes the coordinates of the winning neuron for the sample x """
@@ -120,6 +141,7 @@ class MiniSom:
         # keeps the learning rate nearly constant for the first T iterations and then adjusts it
         eta = self.learning_rate/(1+t/self.T)
         sig = self.sigma/(1+t/self.T) # sigma and learning rate decrease with the same rule
+        #print eta, sig
         g = self.neighborhood(win,sig)*eta # improves the performances
         it = nditer(g, flags=['multi_index'])
         while not it.finished:
@@ -144,7 +166,7 @@ class MiniSom:
             self.weights[it.multi_index] = data[int(random.rand()*len(data)-1)]
             it.iternext()
             
-	self.weights_init = copy(self.weights)
+        self.weights_init = deepcopy(self.weights)
 
     def train_random(self,num_iteration):        
         """ Trains the SOM picking samples at random from data """
@@ -155,6 +177,8 @@ class MiniSom:
         for iteration in range(num_iteration):
             rand_i = int(round(random.rand()*len(data)-1)) # pick a random sample          
             self.update(data[rand_i],self.winner(data[rand_i]),iteration)          
+            
+        self.__project_weights()
       
 
     def train_batch(self,data,num_iteration):
@@ -192,37 +216,40 @@ class MiniSom:
         a = zeros((self.weights.shape[0],self.weights.shape[1]))
         for x in data:
             a[self.winner(x)] += 1
-        return a
+        return a       
+        
 
     def quantization_error(self,data):
         """ 
             Returns the quantization error computed as the average distance between
             each input sample and its best matching unit.            
         """
-        error = 0
-        for x in data:
-            error += linalg.norm(x-self.weights[self.winner(x)])
-        return error/len(data)
+        error = zeros(len(data))
+        for i, x in enumerate(data):
+            error[i] = linalg.norm(x-self.weights[self.winner(x)])
+            #error += linalg.norm(x-self.weights[self.winner(x)])
+        #return error/len(data)
+        return error
 
     def win_map(self,data):
-    	"""
-    	    Returns a dictionary wm where wm[(i,j)] is a list with all the patterns
-    	    that have been mapped in the position i,j.
-    	"""
-    	winmap = defaultdict(list)
-    	for x in data:
-    		winmap[self.winner(x)].append(x)
-    	return winmap
+        """
+            Returns a dictionary wm where wm[(i,j)] is a list with all the patterns
+            that have been mapped in the position i,j.
+        """
+        winmap = defaultdict(list)
+        for x in data:
+            winmap[self.winner(x)].append(x)
+        return winmap
     
     # TODO: refactor this method
     def get_weights(self):
-    	"""
-    		Flattens the two first dimensions of weights and returns 2D initial
-    		and trained weights
-    	"""
-    	d1, d2, d3 = self.weights.shape
-    	winit = self.weights_init.reshape(d1*d2, d3)
-    	w = self.weights.reshape(d1*d2, d3)
-    	
-    	return winit, w
-	
+        """
+            Flattens the two first dimensions of weights and returns 2D initial
+            and trained weights
+        """
+        d1, d2, d3 = self.weights.shape
+        winit = self.weights_init.reshape(d1*d2, d3)
+        w = self.weights.reshape(d1*d2, d3)
+        
+        return winit, w
+    
